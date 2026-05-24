@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Pytest
+.pytest_cache/
+.cache/
+
+# Reports (large binary screenshots excluded, HTML report excluded)
+automation/reports/screenshots/
+automation/reports/report.html
+
+# Playwright
+test-results/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
