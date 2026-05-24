@@ -237,6 +237,294 @@ SDET Junior (Software Development Engineer in Test)
 
 ---
 
+## CZĘŚĆ 9 — Automatyzacja testów webowych krok po kroku
+### Na przykładzie `www.dbcraftmode.pl`
+
+---
+
+### Czym jest automatyzacja testów webowych?
+
+Automatyzacja testów webowych to zastąpienie ręcznego klikania przez testera — programem, który sam otwiera przeglądarkę, wykonuje akcje i sprawdza wyniki. Zamiast klikać "Zaloguj" 50 razy ręcznie, piszesz kod który robi to za Ciebie w 3 sekundy i robi to zawsze tak samo.
+
+**Analogia dla rozmowy kwalifikacyjnej:**
+
+> *"To jak makro w Excelu — zamiast wpisywać dane ręcznie, nagrywasz sekwencję. Tyle że zamiast Excela mamy przeglądarkę, a zamiast nagrywania — piszemy kod który jest dokładny, powtarzalny i można go uruchomić o każdej porze."*
+
+---
+
+### Od czego się zaczyna — myślenie przed kodem
+
+Przed napisaniem pierwszej linii kodu tester zadaje sobie pytania:
+
+**1. Co testuję?**
+Logowanie do panelu admina `dbcraftmode.pl`. Panel ma formularz z e-mailem i hasłem.
+
+**2. Jakie są scenariusze?**
+- Poprawne dane → użytkownik trafia na dashboard
+- Złe hasło → komunikat błędu, brak sesji
+- Puste pola → walidacja formularza
+
+**3. Jak sprawdzę że test przeszedł?**
+- Po poprawnym logowaniu URL powinien zawierać `/admin/dashboard`
+- Po złym haśle powinien pojawić się tekst "Nieprawidłowe dane"
+
+**4. Jakie narzędzia?**
+- Python + Pytest + Playwright
+- Wzorzec Page Object Model (POM)
+
+---
+
+### Krok 1 — Instalacja środowiska
+
+```bash
+# Utwórz folder projektu
+mkdir moje-testy
+cd moje-testy
+
+# Środowisko wirtualne (izolacja bibliotek)
+python -m venv venv
+venv\Scripts\activate        # Windows
+
+# Zainstaluj biblioteki
+pip install pytest playwright pytest-playwright pytest-html
+
+# Pobierz przeglądarkę Chromium
+playwright install chromium
+```
+
+**Co to jest venv?** Izolowane środowisko Pythona — biblioteki zainstalowane w projekcie nie kolidują z innymi projektami na komputerze.
+
+---
+
+### Krok 2 — Page Object Model (POM)
+
+POM to wzorzec projektowy: każda strona aplikacji ma swoją **klasę** w Pythonie. Klasa zna selektory (co kliknąć) i metody (jak to zrobić). Test korzysta z metod klasy, nie z surowych selektorów.
+
+**Bez POM — test wie za dużo:**
+```python
+# Kruche — jeśli ktoś zmieni id formularza, test się sypie
+page.fill('#email-input', 'daniel@dbcraftmode.pl')
+page.fill('#pass', 'admin123')
+page.click('.btn-login')
+assert '/dashboard' in page.url
+```
+
+**Z POM — test mówi CO robić, klasa wie JAK:**
+```python
+# Test — czytelny jak instrukcja
+login = DBCraftLoginPage(page)
+login.open()
+login.login('daniel@dbcraftmode.pl', 'admin123')
+assert login.is_logged_in()
+```
+
+**Klasa strony logowania — `pages/dbcraftmode_page.py`:**
+```python
+class DBCraftLoginPage(BasePage):
+    URL = "https://www.dbcraftmode.pl/admin/"
+
+    # Selektory — w jednym miejscu
+    EMAIL_INPUT    = 'input[name="email"]'
+    PASSWORD_INPUT = 'input[name="password"]'
+    SUBMIT_BUTTON  = 'button[type="submit"]'
+    ERROR_MESSAGE  = '.error-message'
+    DASHBOARD_URL  = '/admin/dashboard'
+
+    def open(self):
+        self.page.goto(self.URL)
+
+    def login(self, email: str, password: str):
+        self.page.fill(self.EMAIL_INPUT, email)
+        self.page.fill(self.PASSWORD_INPUT, password)
+        self.page.click(self.SUBMIT_BUTTON)
+
+    def is_logged_in(self) -> bool:
+        return self.DASHBOARD_URL in self.page.url
+
+    def get_error_message(self) -> str:
+        return self.page.locator(self.ERROR_MESSAGE).inner_text()
+```
+
+**Dlaczego POM?** Jeśli programista zmieni `input[name="email"]` na `input[id="admin-email"]` — zmieniasz w jednym miejscu w klasie, a nie w każdym teście osobno.
+
+---
+
+### Krok 3 — Fixtures w conftest.py
+
+Fixture to gotowy "stan" który Pytest przygotowuje przed testem. Zamiast każdy test logował się osobno — jeden fixture robi to raz i przekazuje gotową sesję.
+
+```python
+# conftest.py
+import pytest
+from playwright.sync_api import sync_playwright
+
+@pytest.fixture(scope="session")
+def browser_context_args(browser_context_args):
+    return {
+        **browser_context_args,
+        "viewport": {"width": 1280, "height": 720},
+        "ignore_https_errors": True,   # polskie hostingi mają niestandardowe SSL
+    }
+
+@pytest.fixture(scope="class")
+def logged_in(page):
+    """Zwraca stronę z aktywną sesją admina."""
+    from pages.dbcraftmode_page import DBCraftLoginPage
+    login = DBCraftLoginPage(page)
+    login.open()
+    login.login('daniel@dbcraftmode.pl', 'admin123')
+    assert login.is_logged_in(), "Fixture: logowanie nie powiodło się"
+    return page
+```
+
+`scope="class"` oznacza: zaloguj się raz dla całej klasy testowej, nie przed każdym testem osobno.
+
+---
+
+### Krok 4 — Testy
+
+```python
+# tests/dbcraftmode/test_dbcraftmode.py
+import pytest
+from pages.dbcraftmode_page import DBCraftLoginPage, DBCraftDashboardPage, DBCraftBlogPage
+
+class TestLogin:
+
+    def test_TC04_wrong_email_shows_error(self, page):
+        """TC-04: Nieprawidłowy email → komunikat błędu."""
+        login = DBCraftLoginPage(page)
+        login.open()
+        login.login('zly@email.pl', 'admin123')
+
+        error = login.get_error_message()
+        assert 'Nieprawidłowe' in error, f"Oczekiwano błędu, dostałem: '{error}'"
+        assert not login.is_logged_in(), "Nie powinien być zalogowany"
+
+    def test_TC05_wrong_password_shows_error(self, page):
+        """TC-05: Złe hasło → błąd, brak sesji."""
+        login = DBCraftLoginPage(page)
+        login.open()
+        login.login('daniel@dbcraftmode.pl', 'zlehaslo')
+
+        assert not login.is_logged_in()
+
+    def test_TC06_correct_login_redirects_to_dashboard(self, page):
+        """TC-06: Poprawne dane → dashboard."""
+        login = DBCraftLoginPage(page)
+        login.open()
+        login.login('daniel@dbcraftmode.pl', 'admin123')
+
+        assert login.is_logged_in(), "Po poprawnym logowaniu powinien być dashboard"
+
+
+class TestBlog:
+
+    def test_TC09_blog_list_loads(self, logged_in):
+        """TC-09: Lista wpisów bloga ładuje się."""
+        blog = DBCraftBlogPage(logged_in)
+        blog.open_list()
+        assert blog.is_list_visible()
+
+    def test_TC12_add_draft_post(self, logged_in):
+        """TC-12: Dodanie szkicu — pojawia się na liście."""
+        blog = DBCraftBlogPage(logged_in)
+        blog.open_add_form()
+        blog.fill_title('Test automatyczny — szkic')
+        blog.fill_content('Treść testowa.')
+        blog.save_as_draft()
+
+        assert blog.is_success_message_visible()
+```
+
+---
+
+### Krok 5 — Uruchomienie i raport
+
+```bash
+# Uruchom wszystkie testy z raportem HTML
+pytest tests/ --html=reports/report.html --self-contained-html -v
+
+# Tylko testy dbcraftmode
+pytest tests/dbcraftmode/ -v
+
+# Z widoczną przeglądarką (do debugowania)
+pytest tests/dbcraftmode/ --headed -v
+```
+
+**Przykładowy wynik:**
+```
+tests/dbcraftmode/test_dbcraftmode.py::TestLogin::test_TC04_wrong_email_shows_error  PASSED
+tests/dbcraftmode/test_dbcraftmode.py::TestLogin::test_TC05_wrong_password_shows_error PASSED
+tests/dbcraftmode/test_dbcraftmode.py::TestLogin::test_TC06_correct_login_redirects_to_dashboard PASSED
+tests/dbcraftmode/test_dbcraftmode.py::TestBlog::test_TC09_blog_list_loads PASSED
+tests/dbcraftmode/test_dbcraftmode.py::TestBlog::test_TC12_add_draft_post PASSED
+
+5 passed in 8.3s
+```
+
+Raport HTML otwierasz w przeglądarce — widać każdy test, czas trwania, zielony lub czerwony wynik.
+
+---
+
+### Krok 6 — Co zrobić gdy test nie przejdzie
+
+Gdy test pada (`FAILED`), Playwright pokazuje:
+1. **Screenshot** — jak wyglądała strona w momencie błędu
+2. **Komunikat asercji** — co było oczekiwane vs co dostał test
+3. **Ślad stosu** — w której linii kodu test się wyłożył
+
+```
+FAILED tests/dbcraftmode/test_dbcraftmode.py::TestLogin::test_TC06
+AssertionError: Po poprawnym logowaniu powinien być dashboard
+assert '/admin/dashboard' in 'https://www.dbcraftmode.pl/admin/'
+```
+
+**Diagnozo:** po kliknięciu "Zaloguj" przeglądarka wróciła na stronę logowania. Przyczyna mogła być:
+- Złe dane (zły email — to był mój rzeczywisty błąd podczas projektu)
+- Sesja wygasła
+- Błąd CSRF tokenu
+- Problem z siecią
+
+**Debug:** dodaję `--headed` żeby zobaczyć co przeglądarka robi i `print(page.url)` po każdym kroku.
+
+---
+
+### Jak opowiedzieć o tym na rozmowie kwalifikacyjnej
+
+**Pytanie: "Pokaż mi jak testowałeś dbcraftmode.pl"**
+
+> *"Zacząłem od analizy aplikacji — zidentyfikowałem 6 modułów: logowanie, dashboard, blog, pomysły, projekty, wylogowanie. Dla każdego napisałem przypadki testowe: happy path i błędne scenariusze.*
+>
+> *Użyłem wzorca Page Object Model — każda strona ma klasę z selektorami. To pozwala na łatwą zmianę selektorów bez modyfikowania testów.*
+>
+> *Napotkałem realny bug: wszystkie testy po logowaniu padały bo miałem zły adres email w konfiguracji — stary email z setupu, nie ten z produkcyjnej bazy. Zdebuggowałem to przez `print(page.url)` po logowaniu — URL wskazywał na stronę logowania zamiast dashboardu.*
+>
+> *Efekt: 17 testów, 0 failed, raport HTML z wynikami."*
+
+**Pytanie: "Dlaczego Playwright, nie Selenium?"**
+
+> *"Playwright ma wbudowany auto-wait — nie trzeba ręcznie czekać na elementy. Jest szybszy i nowocześniejszy. Selenium jest nadal popularne w starszych projektach, ale Playwright to obecny standard dla nowych projektów."*
+
+**Pytanie: "Co to jest Page Object Model?"**
+
+> *"Wzorzec projektowy gdzie każda strona ma swoją klasę. Selektory są w klasie, testy korzystają z metod. Zmiana jednego selektora to edycja w jednym miejscu, nie w każdym teście. W moim projekcie mam 6 takich klas."*
+
+---
+
+### Schemat całego procesu (do zapamiętania)
+
+```
+1. ANALIZA          → co testuję, jakie moduły, jakie scenariusze
+2. PRZYPADKI TC     → happy path + błędne dane + edge cases
+3. PAGE OBJECT      → klasy stron z selektorami i metodami
+4. FIXTURES         → przygotowanie stanu (zalogowanie, baza)
+5. TESTY            → assert: oczekiwany wynik vs rzeczywisty
+6. RAPORT           → HTML z wynikami, screenshoty przy błędach
+7. DEBUG            → --headed, print(page.url), logi
+```
+
+---
+
 ## PODSUMOWANIE — Lista kontrolna przed pierwszą aplikacją
 
 ```
