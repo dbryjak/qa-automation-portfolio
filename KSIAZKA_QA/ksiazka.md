@@ -22,7 +22,8 @@
 | [8. Jak uruchomić](rozdzialy/08_jak_uruchomic.md) | Instrukcja dla rekrutera | — | — |
 | [9. Droga 3 etapów](rozdzialy/09_droga_trzech_etapow.md) | Manual → Auto → Platforma | — | ✅ |
 | [10. Monitor Tokenów](rozdzialy/10_monitor_tokenow.md) | Desktop GUI, tray, wielowątkowość, 5 bugów | 10 TC | ✅ |
-| [10b. Automatyzacja — teoria](rozdzialy/10b_monitor_testy_auto_teoria.md) | Piramida testów, narzędzia, strategia dla desktop | — | 📝 |
+| [10b. Automatyzacja — teoria](rozdzialy/10b_monitor_testy_auto_teoria.md) | Piramida testów, narzędzia, strategia dla desktop | — | ✅ |
+| [10c. Automatyzacja — kod](rozdzialy/10c_monitor_testy_auto_kod.md) | pytest, fixtures, 64 testów (46 unit + 18 integr.), 0 failed | 64 | ✅ |
 | [Notatki dzienne](notatki/dziennik_2026.md) | Dziennik pracy + skrypt | — | 📝 |
 | [List motywacyjny](STRESZCZENIE_LIST_MOTYWACYJNY.md) | Streszczenie do CV | — | 📄 |
 
@@ -31,9 +32,9 @@
 ## Łączny wynik
 
 ```
-83 testy automatyczne + 10 przypadków testowych (desktop)
+83 testy automatyczne (web) + 64 testów (desktop: 46 unit + 18 integracyjnych)
 5 projektów webowych + 1 aplikacja desktopowa
-0 failed
+0 failed · łączny czas: < 5 minut
 ~3-4 minuty na pełne uruchomienie
 ```
 
