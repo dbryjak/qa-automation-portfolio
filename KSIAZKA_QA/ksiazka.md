@@ -24,7 +24,6 @@
 | [10. Monitor Tokenów](rozdzialy/10_monitor_tokenow.md) | Desktop GUI, tray, wielowątkowość, 5 bugów | 10 TC | ✅ |
 | [10b. Automatyzacja — teoria](rozdzialy/10b_monitor_testy_auto_teoria.md) | Piramida testów, narzędzia, strategia dla desktop | — | ✅ |
 | [10c. Automatyzacja — kod](rozdzialy/10c_monitor_testy_auto_kod.md) | pytest, fixtures, 64 testów (46 unit + 18 integr.), 0 failed | 64 | ✅ |
-| [11. Nauka manualna](rozdzialy/11_nauka_manualna_danielbryjak.md) | Słownik EN + 10 TC na danielbryjak.pl — nauka własna | 10 TC | 📖 |
 | [Notatki dzienne](notatki/dziennik_2026.md) | Dziennik pracy + skrypt | — | 📝 |
 
 ---
